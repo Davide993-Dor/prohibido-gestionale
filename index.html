@@ -219,7 +219,7 @@ const sb = {
 
 async function fetchSB(method, table, cols='*') {
   try {
-    const res = await fetch(SUPABASE_URL+'/rest/v1/'+table+'?select='+cols+'&order=id', {
+    const res = await fetch(SUPABASE_URL+'/rest/v1/'+table+'?select='+cols, {
       headers: {
         'apikey': SUPABASE_KEY,
         'Authorization': 'Bearer '+SUPABASE_KEY,
