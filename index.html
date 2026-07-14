@@ -3,7 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Prohibido Milano — Gestionale Tecnico v2.0</title>
+<title>Prohibido Milano — Gestionale Tecnico</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/supabase/2.39.7/supabase.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Segoe UI',system-ui,sans-serif;background:#0a0a0f;color:#e8e8f0;min-height:100vh;font-size:13px}
@@ -14,7 +15,11 @@ header{background:linear-gradient(135deg,#1a0a2e,#0d0d1a);border-bottom:1px soli
 .nav{display:flex;gap:6px;flex-wrap:wrap}
 .nav-btn{padding:7px 14px;border-radius:8px;border:1px solid #2d2d40;background:transparent;color:#9ca3af;font-size:11px;cursor:pointer;font-weight:600;letter-spacing:.04em;transition:all .15s}
 .nav-btn.active,.nav-btn:hover{background:#7c3aed;color:#fff;border-color:#7c3aed}
-.save-bar{background:#0f0f1a;border-bottom:1px solid #1f1f2e;padding:6px 20px;display:flex;align-items:center;justify-content:space-between;font-size:11px;color:#4b5563}
+.sync-bar{background:#0f0f1a;border-bottom:1px solid #1f1f2e;padding:6px 20px;display:flex;align-items:center;justify-content:space-between;font-size:11px}
+.sync-dot{width:8px;height:8px;border-radius:50%;background:#34d399;display:inline-block;margin-right:6px;animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.sync-dot.red{background:#f87171;animation:none}
+.sync-dot.amber{background:#fbbf24}
 .page{display:none;padding:16px 20px}.page.active{display:block}
 .stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:16px}
 .stat-card{background:#13131f;border:1px solid #1f1f2e;border-radius:10px;padding:12px 14px}
@@ -29,9 +34,8 @@ select{background:#13131f;border:1px solid #2d2d40;border-radius:8px;padding:8px
 .btn{padding:8px 14px;border-radius:8px;border:none;cursor:pointer;font-size:11px;font-weight:600;transition:all .15s}
 .btn-p{background:#7c3aed;color:#fff}.btn-p:hover{background:#6d28d9}
 .btn-o{background:transparent;border:1px solid #2d2d40;color:#9ca3af}.btn-o:hover{border-color:#7c3aed;color:#c4b5fd}
-.btn-r{background:transparent;border:1px solid #f8717133;color:#f87171;font-size:10px;padding:4px 8px}.btn-r:hover{background:#f8717122}
-.btn-g{background:transparent;border:1px solid #34d39933;color:#34d399;font-size:10px;padding:4px 8px}.btn-g:hover{background:#34d39922}
-.btn-a{background:transparent;border:1px solid #fbbf2433;color:#fbbf24;font-size:10px;padding:4px 8px}.btn-a:hover{background:#fbbf2422}
+.btn-g{background:transparent;border:1px solid #34d39933;color:#34d399;font-size:10px;padding:4px 8px}
+.btn-a{background:transparent;border:1px solid #fbbf2433;color:#fbbf24;font-size:10px;padding:4px 8px}
 table{width:100%;border-collapse:collapse;font-size:11px}
 thead tr{background:#13131f;border-bottom:2px solid #7c3aed44}
 th{padding:9px 10px;text-align:left;font-size:10px;color:#6b7280;text-transform:uppercase;letter-spacing:.07em;font-weight:600;white-space:nowrap}
@@ -76,13 +80,16 @@ td{padding:8px 10px;vertical-align:middle}
 .alert{padding:8px 12px;border-radius:8px;font-size:11px;margin-bottom:8px;line-height:1.5}
 .alert-r{background:#7f1d1d22;border-left:3px solid #f87171;color:#fca5a5}
 .alert-a{background:#78350f22;border-left:3px solid #fbbf24;color:#fde68a}
+.loading{text-align:center;padding:40px;color:#6b7280}
+.spinner{display:inline-block;width:20px;height:20px;border:2px solid #7c3aed33;border-top-color:#7c3aed;border-radius:50%;animation:spin .8s linear infinite;margin-right:8px;vertical-align:middle}
+@keyframes spin{to{transform:rotate(360deg)}}
 </style>
 </head>
 <body>
 <header>
   <div>
     <div class="logo">PROHIBIDO <span>MILANO</span></div>
-    <div class="subtitle">Gestione Attrezzatura Tecnica v2.0</div>
+    <div class="subtitle">Gestionale Attrezzatura Tecnica — Live Sync</div>
   </div>
   <div class="nav">
     <button class="nav-btn active" onclick="showPage('dashboard')">📊 Dashboard</button>
@@ -92,49 +99,49 @@ td{padding:8px 10px;vertical-align:middle}
     <button class="nav-btn" onclick="showPage('costi')">💶 Costi</button>
   </div>
 </header>
-<div class="save-bar">
-  <span id="save-info">Caricamento dati...</span>
+<div class="sync-bar">
+  <span><span class="sync-dot" id="sync-dot"></span><span id="sync-status">Connessione in corso...</span></span>
   <button class="btn btn-o" style="font-size:10px;padding:4px 10px" onclick="exportCSV()">⬇ Esporta CSV</button>
 </div>
 
 <div class="page active" id="page-dashboard">
-  <div class="stats-grid" id="stats-grid"></div>
+  <div class="stats-grid" id="stats-grid"><div class="loading"><span class="spinner"></span>Caricamento...</div></div>
   <div id="alerts-box"></div>
   <div class="section-title">Attrezzatura con problemi aperti</div>
-  <div style="overflow-x:auto"><table><thead><tr><th>Codice</th><th>Categoria</th><th>Marca / Modello</th><th>Stato</th><th>Ultimo guasto</th><th>Gestito da</th><th>N° ripar.</th><th>Costo tot. ripar.</th></tr></thead><tbody id="dash-table"></tbody></table></div>
+  <div style="overflow-x:auto"><table><thead><tr><th>Codice</th><th>Categoria</th><th>Marca / Modello</th><th>Stato</th><th>Ultimo guasto</th><th>Gestito da</th><th>N° ripar.</th><th>Costo tot.</th></tr></thead><tbody id="dash-table"><tr><td colspan="8" class="loading"><span class="spinner"></span>Caricamento...</td></tr></tbody></table></div>
 </div>
 
 <div class="page" id="page-inventario">
   <div class="table-controls">
-    <input class="search" id="inv-search" placeholder="Cerca codice, marca, modello, posizione..." oninput="renderInventario()">
+    <input class="search" id="inv-search" placeholder="Cerca..." oninput="renderInventario()">
     <select id="inv-cat" onchange="renderInventario()"><option value="">Tutte le categorie</option></select>
     <select id="inv-stato" onchange="renderInventario()"><option value="">Tutti gli stati</option><option>IN USO</option><option>IN RIPARAZIONE</option><option>GUASTA</option><option>NON IN USO</option></select>
     <select id="inv-prop" onchange="renderInventario()"><option value="">Tutti</option><option>Proprietà</option><option>Noleggio</option></select>
     <button class="btn btn-o" onclick="clearInvFilters()">✕</button>
     <button class="btn btn-p" onclick="openAddArticolo()">+ Aggiungi</button>
   </div>
-  <div style="overflow-x:auto"><table><thead><tr><th>Codice</th><th>Categoria</th><th>Marca</th><th>Modello</th><th>Posizione</th><th>Stato</th><th>Proprietà</th><th>N° ripar.</th><th>Costo tot. ripar.</th><th>Azioni</th></tr></thead><tbody id="inv-table"></tbody></table></div>
+  <div style="overflow-x:auto"><table><thead><tr><th>Codice</th><th>Categoria</th><th>Marca</th><th>Modello</th><th>Posizione</th><th>Stato</th><th>Proprietà</th><th>N° ripar.</th><th>Costo tot.</th><th>Azioni</th></tr></thead><tbody id="inv-table"><tr><td colspan="10" class="loading"><span class="spinner"></span>Caricamento...</td></tr></tbody></table></div>
   <div id="inv-empty" class="empty" style="display:none">🔍 Nessun risultato</div>
 </div>
 
 <div class="page" id="page-riparazioni">
   <div class="table-controls">
-    <input class="search" id="rip-search" placeholder="Cerca articolo, fornitore, motivo..." oninput="renderRiparazioni()">
+    <input class="search" id="rip-search" placeholder="Cerca..." oninput="renderRiparazioni()">
     <select id="rip-filter" onchange="renderRiparazioni()"><option value="">Tutte</option><option value="aperta">Aperte</option><option value="chiusa">Chiuse</option></select>
     <button class="btn btn-p" onclick="openAddRiparazione(null)">+ Nuova riparazione</button>
   </div>
-  <div style="overflow-x:auto"><table><thead><tr><th>Articolo</th><th>Codice</th><th>Data guasto</th><th>Data ritiro</th><th>Data riconsegna</th><th>Fornitore</th><th>Motivo</th><th>Costo (€)</th><th>Stato</th><th>Azioni</th></tr></thead><tbody id="rip-table"></tbody></table></div>
-  <div id="rip-empty" class="empty" style="display:none">🔧 Nessuna riparazione registrata</div>
+  <div style="overflow-x:auto"><table><thead><tr><th>Articolo</th><th>Codice</th><th>Data guasto</th><th>Data ritiro</th><th>Riconsegna</th><th>Fornitore</th><th>Motivo</th><th>Costo (€)</th><th>Stato</th><th>Azioni</th></tr></thead><tbody id="rip-table"><tr><td colspan="10" class="loading"><span class="spinner"></span>Caricamento...</td></tr></tbody></table></div>
+  <div id="rip-empty" class="empty" style="display:none">🔧 Nessuna riparazione</div>
 </div>
 
 <div class="page" id="page-noleggio">
   <div class="table-controls"><button class="btn btn-p" onclick="openAddNoleggio()">+ Aggiungi noleggio</button></div>
-  <div id="noleggio-list"></div>
+  <div id="noleggio-list"><div class="loading"><span class="spinner"></span>Caricamento...</div></div>
 </div>
 
-<div class="page" id="page-costi"><div id="costi-content"></div></div>
+<div class="page" id="page-costi"><div id="costi-content"><div class="loading"><span class="spinner"></span>Caricamento...</div></div></div>
 
-<!-- MODAL ARTICOLO -->
+<!-- MODALS -->
 <div class="modal-bg" id="modal-articolo">
 <div class="modal">
   <div class="mh"><div class="mt" id="modal-articolo-title">Articolo</div><button class="mc" onclick="closeModal('modal-articolo')">✕</button></div>
@@ -148,7 +155,6 @@ td{padding:8px 10px;vertical-align:middle}
   <div class="mf"><button class="btn btn-o" onclick="closeModal('modal-articolo')">Annulla</button><button class="btn btn-p" onclick="saveArticolo()">Salva</button></div>
 </div></div>
 
-<!-- MODAL STORICO -->
 <div class="modal-bg" id="modal-storico">
 <div class="modal modal-lg">
   <div class="mh"><div class="mt" id="storico-title">Storico</div><button class="mc" onclick="closeModal('modal-storico')">✕</button></div>
@@ -156,189 +162,229 @@ td{padding:8px 10px;vertical-align:middle}
     <div id="storico-stats" style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:4px"></div>
     <div class="section-title">Storico riparazioni</div>
     <div id="storico-list"></div>
-    <button class="btn btn-a" style="margin-top:8px;width:100%" onclick="openAddRiparazioneFromStorico()">+ Aggiungi riparazione per questo articolo</button>
+    <button class="btn btn-a" style="margin-top:8px;width:100%" onclick="openAddRiparazioneFromStorico()">+ Aggiungi riparazione</button>
   </div>
   <div class="mf"><button class="btn btn-o" onclick="closeModal('modal-storico')">Chiudi</button></div>
 </div></div>
 
-<!-- MODAL RIPARAZIONE -->
 <div class="modal-bg" id="modal-riparazione">
 <div class="modal">
   <div class="mh"><div class="mt" id="modal-rip-title">Riparazione</div><button class="mc" onclick="closeModal('modal-riparazione')">✕</button></div>
   <div class="mb">
-    <div class="field"><label>Articolo</label><select id="r-articolo"><option value="">Seleziona articolo...</option></select></div>
-    <div class="field-row"><div class="field"><label>Data guasto</label><input id="r-dguasto" type="date"></div><div class="field"><label>Data ritiro riparazione</label><input id="r-dritiro" type="date"></div></div>
-    <div class="field-row"><div class="field"><label>Data riconsegna</label><input id="r-driconsegna" type="date"></div><div class="field"><label>Costo riparazione (€)</label><input id="r-costo" type="number" min="0" step="0.01" placeholder="0.00"></div></div>
-    <div class="field-row"><div class="field"><label>Fornitore / Tecnico</label><input id="r-fornitore" type="text"></div><div class="field"><label>Stato articolo dopo ripar.</label><select id="r-stato-dopo"><option>IN USO</option><option>IN RIPARAZIONE</option><option>GUASTA</option><option>NON IN USO</option></select></div></div>
-    <div class="field"><label>Motivo guasto</label><textarea id="r-motivo" placeholder="Descrivi il problema..."></textarea></div>
-    <div class="field"><label>Note / Esito riparazione</label><textarea id="r-note" placeholder="Esito, pezzi sostituiti, ecc..."></textarea></div>
+    <div class="field"><label>Articolo</label><select id="r-articolo"><option value="">Seleziona...</option></select></div>
+    <div class="field-row"><div class="field"><label>Data guasto</label><input id="r-dguasto" type="date"></div><div class="field"><label>Data ritiro</label><input id="r-dritiro" type="date"></div></div>
+    <div class="field-row"><div class="field"><label>Data riconsegna</label><input id="r-driconsegna" type="date"></div><div class="field"><label>Costo (€)</label><input id="r-costo" type="number" min="0" step="0.01"></div></div>
+    <div class="field-row"><div class="field"><label>Fornitore / Tecnico</label><input id="r-fornitore" type="text"></div><div class="field"><label>Stato dopo riparazione</label><select id="r-stato-dopo"><option>IN USO</option><option>IN RIPARAZIONE</option><option>GUASTA</option><option>NON IN USO</option></select></div></div>
+    <div class="field"><label>Motivo guasto</label><textarea id="r-motivo"></textarea></div>
+    <div class="field"><label>Note / Esito</label><textarea id="r-note"></textarea></div>
   </div>
   <div class="mf"><button class="btn btn-o" onclick="closeModal('modal-riparazione')">Annulla</button><button class="btn btn-p" onclick="saveRiparazione()">Salva</button></div>
 </div></div>
 
-<!-- MODAL NOLEGGIO -->
 <div class="modal-bg" id="modal-noleggio">
 <div class="modal">
   <div class="mh"><div class="mt" id="modal-nol-title">Noleggio</div><button class="mc" onclick="closeModal('modal-noleggio')">✕</button></div>
   <div class="mb">
-    <div class="field"><label>Articolo / Descrizione</label><input id="n-desc" type="text"></div>
+    <div class="field"><label>Descrizione</label><input id="n-desc" type="text"></div>
     <div class="field-row"><div class="field"><label>Fornitore</label><input id="n-fornitore" type="text"></div><div class="field"><label>Costo mensile (€)</label><input id="n-costo" type="number" min="0" step="0.01"></div></div>
     <div class="field-row"><div class="field"><label>Data inizio</label><input id="n-inizio" type="date"></div><div class="field"><label>Data scadenza</label><input id="n-scadenza" type="date"></div></div>
-    <div class="field"><label>Note</label><textarea id="n-note" placeholder="Note sul contratto di noleggio..."></textarea></div>
+    <div class="field"><label>Note</label><textarea id="n-note"></textarea></div>
   </div>
   <div class="mf"><button class="btn btn-o" onclick="closeModal('modal-noleggio')">Annulla</button><button class="btn btn-p" onclick="saveNoleggio()">Salva</button></div>
 </div></div>
 
 <script>
-let articoli=[
-  {id:"JB1",cat:"BEAM",marca:"JBSYSTEMS",modello:"CHALLENGER",pos:"LINEA 1",stato:"IN USO",prop:"Proprietà",gestito:"ET2",note:""},
-  {id:"JB2",cat:"BEAM",marca:"JBSYSTEMS",modello:"CHALLENGER",pos:"LINEA 1",stato:"IN USO",prop:"Proprietà",gestito:"ET2",note:""},
-  {id:"JB3",cat:"BEAM",marca:"JBSYSTEMS",modello:"CHALLENGER",pos:"LINEA 1",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
-  {id:"JB4",cat:"BEAM",marca:"JBSYSTEMS",modello:"CHALLENGER",pos:"LINEA 1",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
-  {id:"JB5",cat:"BEAM",marca:"JBSYSTEMS",modello:"CHALLENGER",pos:"LINEA 1",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
-  {id:"JB6",cat:"BEAM",marca:"JBSYSTEMS",modello:"CHALLENGER",pos:"LINEA 1",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
-  {id:"ADJ1",cat:"BEAM",marca:"ADJ",modello:"FOCUS 4 PZ",pos:"LINEA 2",stato:"IN USO",prop:"Proprietà",gestito:"GD DISTRIBUTION",note:""},
-  {id:"ADJ2",cat:"BEAM",marca:"ADJ",modello:"FOCUS 4 PZ",pos:"LINEA 2",stato:"IN RIPARAZIONE",prop:"Proprietà",gestito:"GD DISTRIBUTION",note:""},
-  {id:"ADJX",cat:"BEAM",marca:"ADJ",modello:"FOCUS 4 PZ",pos:"DI RISERVA",stato:"IN RIPARAZIONE",prop:"Proprietà",gestito:"GD DISTRIBUTION",note:""},
-  {id:"ADJ3",cat:"BEAM",marca:"ADJ",modello:"FOCUS 4 PZ",pos:"LINEA 2",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
-  {id:"ADJ4",cat:"BEAM",marca:"ADJ",modello:"FOCUS 4 PZ",pos:"LINEA 3",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
-  {id:"ADJ5",cat:"BEAM",marca:"ADJ",modello:"FOCUS 4 PZ",pos:"LINEA 3",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
-  {id:"ADJ6",cat:"BEAM",marca:"ADJ",modello:"FOCUS 4 PZ",pos:"LINEA 4",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
-  {id:"ADJ7",cat:"BEAM",marca:"ADJ",modello:"FOCUS 4 PZ",pos:"LINEA 4",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
-  {id:"ADJ8",cat:"BEAM",marca:"ADJ",modello:"FOCUS 4 PZ",pos:"LINEA 4",stato:"IN USO",prop:"Proprietà",gestito:"GD DISTRIBUTION",note:""},
-  {id:"WSH1",cat:"WASH",marca:"MINER LIGHT",modello:"WASH",pos:"LINEA 2",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
-  {id:"WSH2",cat:"WASH",marca:"MINER LIGHT",modello:"WASH",pos:"LINEA 3",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
-  {id:"WSH3",cat:"WASH",marca:"MINER LIGHT",modello:"WASH",pos:"LINEA 3",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
-  {id:"WSH4",cat:"WASH",marca:"MINER LIGHT",modello:"WASH",pos:"LINEA 4",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
-  {id:"BEY1",cat:"MINI WASH",marca:"FLASH",modello:"BIG EYE PRO",pos:"LINEA 1",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
-  {id:"BEY2",cat:"MINI WASH",marca:"FLASH",modello:"BIG EYE PRO",pos:"LINEA 1",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
-  {id:"BEY3",cat:"MINI WASH",marca:"FLASH",modello:"BIG EYE PRO",pos:"LINEA 1",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
-  {id:"BEY4",cat:"MINI WASH",marca:"FLASH",modello:"BIG EYE PRO",pos:"LINEA 1",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
-  {id:"STR1",cat:"STROBE",marca:"FLASH",modello:"LEDSTROBE",pos:"LINEA 1",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
-  {id:"STR2",cat:"STROBE",marca:"FLASH",modello:"LEDSTROBE",pos:"N/A",stato:"GUASTA",prop:"Proprietà",gestito:"TOMMASO TANZI",note:"In possesso di Tommaso"},
-  {id:"HAZE1",cat:"SMOKE MACHINE",marca:"ZIPP",modello:"HAZZE1210",pos:"LINEA 4",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
-  {id:"SPK1",cat:"SPARKULAR",marca:"FLASH",modello:"SPARK",pos:"LINEA 1",stato:"IN USO",prop:"Proprietà",gestito:"GD DISTRIBUTION",note:"Installato luglio 2025"},
-  {id:"SPK2",cat:"SPARKULAR",marca:"FLASH",modello:"SPARK",pos:"LINEA 1",stato:"IN USO",prop:"Proprietà",gestito:"GD DISTRIBUTION",note:"Installato luglio 2025"},
-  {id:"SAG1",cat:"SAGOMATORE",marca:"IKON PROFILE",modello:"IKON PROFILE",pos:"LINEA 3",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
-  {id:"SAG2",cat:"SAGOMATORE",marca:"IKON PROFILE",modello:"IKON PROFILE",pos:"LINEA 3",stato:"NON IN USO",prop:"Proprietà",gestito:"",note:""},
-  {id:"SAG3",cat:"SAGOMATORE",marca:"IKON PROFILE",modello:"IKON PROFILE",pos:"LINEA 3",stato:"NON IN USO",prop:"Proprietà",gestito:"",note:""},
-  {id:"SAG4",cat:"SAGOMATORE",marca:"IKON PROFILE",modello:"IKON PROFILE",pos:"LINEA 3",stato:"NON IN USO",prop:"Proprietà",gestito:"",note:""},
-  {id:"PAR1",cat:"PAR",marca:"SG",modello:"SLIMPAR",pos:"LINEA 1",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
-  {id:"PAR2",cat:"PAR",marca:"SG",modello:"SLIMPAR",pos:"LINEA 1",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
-  {id:"PAR3",cat:"PAR",marca:"SG",modello:"SLIMPAR",pos:"LINEA 1",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
-  {id:"PAR4",cat:"PAR",marca:"SG",modello:"SLIMPAR",pos:"LINEA 1",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
-  {id:"PAR5",cat:"PAR",marca:"SG",modello:"SLIMPAR",pos:"LINEA 1",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
-  {id:"PAR6",cat:"PAR",marca:"SG",modello:"SLIMPAR",pos:"LINEA 2",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
-  {id:"PAR7",cat:"PAR",marca:"SG",modello:"SLIMPAR",pos:"LINEA 2",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
-  {id:"PAR8",cat:"PAR",marca:"SG",modello:"SLIMPAR",pos:"LINEA 2",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
-  {id:"PAR9",cat:"PAR",marca:"SG",modello:"SLIMPAR",pos:"LINEA 3",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
-  {id:"PAR10",cat:"PAR",marca:"SG",modello:"SLIMPAR",pos:"LINEA 3",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
-  {id:"PAR11",cat:"PAR",marca:"SG",modello:"SLIMPAR",pos:"LINEA 3",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
-  {id:"PAR12",cat:"PAR",marca:"SG",modello:"SLIMPAR",pos:"LINEA 3",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
-  {id:"PAR13",cat:"PAR",marca:"SG",modello:"SLIMPAR",pos:"LINEA 3",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
-  {id:"PAR14",cat:"PAR",marca:"SG",modello:"SLIMPAR",pos:"LINEA 3",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
-  {id:"PAR15",cat:"PAR",marca:"SG",modello:"SLIMPAR",pos:"LINEA 4",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
-  {id:"PAR16",cat:"PAR",marca:"SG",modello:"SLIMPAR",pos:"LINEA 4",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
-  {id:"PAR17",cat:"PAR",marca:"SG",modello:"SLIMPAR",pos:"LINEA 4",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
-  {id:"PAR18",cat:"PAR",marca:"SG",modello:"SLIMPAR",pos:"LINEA 4",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
-  {id:"MHB1",cat:"MOVING LED BAR",marca:"FLASH",modello:"LED MOVING HEAD BAR",pos:"LINEA 2",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
-  {id:"MHB2",cat:"MOVING LED BAR",marca:"FLASH",modello:"LED MOVING HEAD BAR",pos:"LINEA 2",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
-  {id:"MHB3",cat:"MOVING LED BAR",marca:"FLASH",modello:"LED MOVING HEAD BAR",pos:"LINEA 4",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
-  {id:"MHB4",cat:"MOVING LED BAR",marca:"FLASH",modello:"LED MOVING HEAD BAR",pos:"LINEA 4",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
-  {id:"BL1",cat:"BLINDER",marca:"FLASH",modello:"2000 BLINDER",pos:"LINEA 1",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
-  {id:"BL2",cat:"BLINDER",marca:"FLASH",modello:"2000 BLINDER",pos:"LINEA 1",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
-  {id:"AVO1",cat:"CONSOLLE",marca:"AVOLITES",modello:"T3 TITAN MOBILE",pos:"REGIA",stato:"IN USO",prop:"Proprietà",gestito:"TOMMASO",note:"Installata 05/02/2026"},
-  {id:"APC1",cat:"MIDI DEVICE",marca:"AKAI",modello:"APC MINI MK2",pos:"REGIA",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
-  {id:"PROJ1",cat:"PROIETTORE",marca:"N/D",modello:"N/D",pos:"N/D",stato:"IN USO",prop:"Noleggio",gestito:"",note:"A noleggio"},
-  {id:"YMH1",cat:"LOUDSPEAKER",marca:"YAMAHA",modello:"DXR8",pos:"DX 1",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
-  {id:"YMH2",cat:"LOUDSPEAKER",marca:"YAMAHA",modello:"DXR8",pos:"DX 2",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
-  {id:"YMH3",cat:"LOUDSPEAKER",marca:"YAMAHA",modello:"DXR8",pos:"DX 3",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
-  {id:"YMH4",cat:"LOUDSPEAKER",marca:"YAMAHA",modello:"DXR8",pos:"C LEFT",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
-  {id:"YMH5",cat:"LOUDSPEAKER",marca:"YAMAHA",modello:"DXR8",pos:"C RIGHT",stato:"GUASTA",prop:"Proprietà",gestito:"",note:""},
-  {id:"YMH6",cat:"LOUDSPEAKER",marca:"YAMAHA",modello:"DXR8",pos:"SX 2",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
-  {id:"YMH7",cat:"LOUDSPEAKER",marca:"YAMAHA",modello:"DXR8",pos:"SX 1",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
-  {id:"YMH8",cat:"LOUDSPEAKER",marca:"YAMAHA",modello:"DXR8",pos:"SPIA LEFT",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
-  {id:"YMH9",cat:"LOUDSPEAKER",marca:"YAMAHA",modello:"DXR8",pos:"SPIA C",stato:"GUASTA",prop:"Proprietà",gestito:"",note:""},
-  {id:"YMH10",cat:"LOUDSPEAKER",marca:"YAMAHA",modello:"DXR8",pos:"SPIA RIGHT",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
-  {id:"YMH11",cat:"LOUDSPEAKER",marca:"YAMAHA",modello:"DXR8",pos:"SALETTA 1",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
-  {id:"YMH12",cat:"LOUDSPEAKER",marca:"YAMAHA",modello:"DXR8",pos:"SALETTA 2",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
-  {id:"YMHS1",cat:"SUBWOOFER",marca:"YAMAHA",modello:"DXS12",pos:"LEFT",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
-  {id:"YMHS2",cat:"SUBWOOFER",marca:"YAMAHA",modello:"DXS12",pos:"RIGHT",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
-  {id:"SHRSLXD1",cat:"RADIO MICROFONO",marca:"SHURE",modello:"SLXD-SM58",pos:"CORINNA/JESSY",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
-  {id:"SHRSLXD2",cat:"RADIO MICROFONO",marca:"SHURE",modello:"SLXD-SM58",pos:"GERARDO/LUCA",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
-  {id:"SHRSLXD3",cat:"RADIO MICROFONO",marca:"SHURE",modello:"SLXD-SM58",pos:"MARINA",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
-  {id:"SHRSLXD4",cat:"RADIO MICROFONO",marca:"SHURE",modello:"SLXD-SM58",pos:"GIOVANNI/MARIANO",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
-  {id:"SENHXSW1",cat:"RADIO MICROFONO",marca:"SENNHEISER",modello:"EWG3-BODYPACK",pos:"TROMBA 1 ANDREA",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
-  {id:"SENHXSW2",cat:"RADIO MICROFONO",marca:"SENNHEISER",modello:"EWG3-BODYPACK",pos:"TROMBA 2 SIMONE",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
-  {id:"SENHEW1",cat:"RADIO MICROFONO",marca:"SENNHEISER",modello:"XSW-BODYPACK",pos:"VIOLINO/CAJON",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
-  {id:"SENHEW2",cat:"RADIO MICROFONO",marca:"SENNHEISER",modello:"XSW-BODYPACK",pos:"N/A",stato:"NON IN USO",prop:"Proprietà",gestito:"",note:""},
-  {id:"SENHEW3",cat:"RADIO MICROFONO",marca:"SENNHEISER",modello:"EWG4 GELATO",pos:"N/A",stato:"NON IN USO",prop:"Proprietà",gestito:"",note:""},
-  {id:"SHRSLXD5",cat:"RICEVITORE RF",marca:"SHURE",modello:"SLXD 4D",pos:"REGIA",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
-  {id:"SHRSLXD6",cat:"RICEVITORE RF",marca:"SHURE",modello:"SLXD 4D",pos:"REGIA",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
-  {id:"SENHXSW3",cat:"RICEVITORE RF",marca:"SENNHEISER",modello:"XS WIRELESS 2",pos:"REGIA",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
-  {id:"SENHXSW4",cat:"RICEVITORE RF",marca:"SENNHEISER",modello:"XS WIRELESS 2",pos:"REGIA",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
-  {id:"SENHEW4",cat:"RICEVITORE RF",marca:"SENNHEISER",modello:"EW100 G3",pos:"REGIA",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
-  {id:"SENHEW5",cat:"RICEVITORE RF",marca:"SENNHEISER",modello:"EW100 G3",pos:"REGIA",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
-  {id:"SENHEW6",cat:"RICEVITORE RF",marca:"SENNHEISER",modello:"EW100 G3",pos:"REGIA",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
-  {id:"SENHANT1",cat:"ANTENNE RF",marca:"SENNHEISER",modello:"",pos:"REGIA",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
-  {id:"SENHANT2",cat:"ANTENNE RF",marca:"SENNHEISER",modello:"",pos:"REGIA",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
-];
-let riparazioni=[
-  {rid:"r1",artId:"JB1",dguasto:"2026-04-28",dritiro:"2026-06-05",driconsegna:"",fornitore:"ET2",motivo:"",costo:"",statoDopoRipar:"IN USO",note:""},
-  {rid:"r2",artId:"JB2",dguasto:"2026-04-28",dritiro:"2026-06-05",driconsegna:"",fornitore:"ET2",motivo:"",costo:"",statoDopoRipar:"IN USO",note:""},
-  {rid:"r3",artId:"ADJ1",dguasto:"2026-01-14",dritiro:"2026-03-18",driconsegna:"2026-03-18",fornitore:"GD DISTRIBUTION",motivo:"",costo:"",statoDopoRipar:"IN USO",note:""},
-  {rid:"r4",artId:"ADJ2",dguasto:"2026-05-11",dritiro:"",driconsegna:"",fornitore:"GD DISTRIBUTION",motivo:"",costo:"",statoDopoRipar:"IN RIPARAZIONE",note:""},
-  {rid:"r5",artId:"ADJX",dguasto:"2026-05-11",dritiro:"",driconsegna:"",fornitore:"GD DISTRIBUTION",motivo:"",costo:"",statoDopoRipar:"IN RIPARAZIONE",note:""},
-  {rid:"r6",artId:"ADJ8",dguasto:"2026-01-14",dritiro:"2026-03-18",driconsegna:"2026-03-18",fornitore:"GD DISTRIBUTION",motivo:"",costo:"",statoDopoRipar:"IN USO",note:""},
-  {rid:"r7",artId:"STR2",dguasto:"2026-02-06",dritiro:"",driconsegna:"",fornitore:"TOMMASO TANZI",motivo:"In possesso di Tommaso",costo:"",statoDopoRipar:"GUASTA",note:""},
-  {rid:"r8",artId:"SPK1",dguasto:"2026-01-14",dritiro:"2026-03-18",driconsegna:"2026-03-18",fornitore:"GD DISTRIBUTION",motivo:"",costo:"",statoDopoRipar:"IN USO",note:""},
-  {rid:"r9",artId:"SPK2",dguasto:"2026-01-14",dritiro:"2026-03-18",driconsegna:"2026-03-18",fornitore:"GD DISTRIBUTION",motivo:"",costo:"",statoDopoRipar:"IN USO",note:""},
-];
-let noleggi=[{nid:"n1",desc:"Proiettore",fornitore:"N/D",costoMensile:220,inizio:"",scadenza:"",note:"Noleggio proiettore sala principale"}];
-let editArtIdx=-1,editRipIdx=-1,editNolIdx=-1,storicoArtId=null;
+const SUPABASE_URL = 'https://jldxyuroojlhyybuwmbk.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpsZHh5dXJvb2psaHl5YnV3bWJrIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4NDAwNjYxOCwiZXhwIjoyMDk5NTgyNjE4fQ.mK4zPt_Dqf6lRPDgLV9_i_ldqhnNFfwgcq2HNFn9P1M';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-function save(){try{localStorage.setItem('phb_art',JSON.stringify(articoli));localStorage.setItem('phb_rip',JSON.stringify(riparazioni));localStorage.setItem('phb_nol',JSON.stringify(noleggi));const ts=new Date().toLocaleString('it-IT');localStorage.setItem('phb_ts',ts);document.getElementById('save-info').textContent='💾 Salvato: '+ts;}catch(e){document.getElementById('save-info').textContent='⚠ Salvataggio non disponibile';}}
-function load(){try{const a=localStorage.getItem('phb_art'),r=localStorage.getItem('phb_rip'),n=localStorage.getItem('phb_nol'),ts=localStorage.getItem('phb_ts');if(a)articoli=JSON.parse(a);if(r)riparazioni=JSON.parse(r);if(n)noleggi=JSON.parse(n);document.getElementById('save-info').textContent=ts?'💾 Ultimo salvataggio: '+ts:'Nessun dato salvato — i dati verranno salvati automaticamente ad ogni modifica';}catch(e){}}
+let articoli=[], riparazioni=[], noleggi=[];
+let editArtId=null, editRipId=null, editNolId=null, storicoArtId=null;
+
+// ── SYNC STATUS ───────────────────────────────────────────────────────────
+function setSyncStatus(status, msg){
+  const dot=document.getElementById('sync-dot');
+  const txt=document.getElementById('sync-status');
+  dot.className='sync-dot '+(status==='ok'?'':'amber');
+  txt.textContent=msg;
+}
+
+// ── LOAD DATA ─────────────────────────────────────────────────────────────
+async function loadAll(){
+  setSyncStatus('loading','Caricamento dati...');
+  try {
+    const [a,r,n] = await Promise.all([
+      sb.from('articoli').select('*').order('cat').order('id'),
+      sb.from('riparazioni').select('*').order('dguasto'),
+      sb.from('noleggi').select('*')
+    ]);
+    if(a.error||r.error||n.error) throw new Error('Errore database');
+    articoli = a.data || [];
+    riparazioni = r.data || [];
+    noleggi = n.data || [];
+
+    // Carica dati iniziali se db vuoto
+    if(articoli.length === 0) await seedData();
+
+    setSyncStatus('ok','🟢 Sincronizzato — '+new Date().toLocaleTimeString('it-IT'));
+    refreshAll();
+  } catch(e) {
+    setSyncStatus('err','🔴 Errore connessione — '+e.message);
+  }
+}
+
+async function seedData(){
+  const arts = [
+    {id:"JB1",cat:"BEAM",marca:"JBSYSTEMS",modello:"CHALLENGER",pos:"LINEA 1",stato:"IN USO",prop:"Proprietà",gestito:"ET2",note:""},
+    {id:"JB2",cat:"BEAM",marca:"JBSYSTEMS",modello:"CHALLENGER",pos:"LINEA 1",stato:"IN USO",prop:"Proprietà",gestito:"ET2",note:""},
+    {id:"JB3",cat:"BEAM",marca:"JBSYSTEMS",modello:"CHALLENGER",pos:"LINEA 1",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
+    {id:"JB4",cat:"BEAM",marca:"JBSYSTEMS",modello:"CHALLENGER",pos:"LINEA 1",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
+    {id:"JB5",cat:"BEAM",marca:"JBSYSTEMS",modello:"CHALLENGER",pos:"LINEA 1",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
+    {id:"JB6",cat:"BEAM",marca:"JBSYSTEMS",modello:"CHALLENGER",pos:"LINEA 1",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
+    {id:"ADJ1",cat:"BEAM",marca:"ADJ",modello:"FOCUS 4 PZ",pos:"LINEA 2",stato:"IN USO",prop:"Proprietà",gestito:"GD DISTRIBUTION",note:""},
+    {id:"ADJ2",cat:"BEAM",marca:"ADJ",modello:"FOCUS 4 PZ",pos:"LINEA 2",stato:"IN RIPARAZIONE",prop:"Proprietà",gestito:"GD DISTRIBUTION",note:""},
+    {id:"ADJX",cat:"BEAM",marca:"ADJ",modello:"FOCUS 4 PZ",pos:"DI RISERVA",stato:"IN RIPARAZIONE",prop:"Proprietà",gestito:"GD DISTRIBUTION",note:""},
+    {id:"ADJ3",cat:"BEAM",marca:"ADJ",modello:"FOCUS 4 PZ",pos:"LINEA 2",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
+    {id:"ADJ4",cat:"BEAM",marca:"ADJ",modello:"FOCUS 4 PZ",pos:"LINEA 3",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
+    {id:"ADJ5",cat:"BEAM",marca:"ADJ",modello:"FOCUS 4 PZ",pos:"LINEA 3",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
+    {id:"ADJ6",cat:"BEAM",marca:"ADJ",modello:"FOCUS 4 PZ",pos:"LINEA 4",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
+    {id:"ADJ7",cat:"BEAM",marca:"ADJ",modello:"FOCUS 4 PZ",pos:"LINEA 4",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
+    {id:"ADJ8",cat:"BEAM",marca:"ADJ",modello:"FOCUS 4 PZ",pos:"LINEA 4",stato:"IN USO",prop:"Proprietà",gestito:"GD DISTRIBUTION",note:""},
+    {id:"WSH1",cat:"WASH",marca:"MINER LIGHT",modello:"WASH",pos:"LINEA 2",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
+    {id:"WSH2",cat:"WASH",marca:"MINER LIGHT",modello:"WASH",pos:"LINEA 3",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
+    {id:"WSH3",cat:"WASH",marca:"MINER LIGHT",modello:"WASH",pos:"LINEA 3",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
+    {id:"WSH4",cat:"WASH",marca:"MINER LIGHT",modello:"WASH",pos:"LINEA 4",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
+    {id:"BEY1",cat:"MINI WASH",marca:"FLASH",modello:"BIG EYE PRO",pos:"LINEA 1",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
+    {id:"BEY2",cat:"MINI WASH",marca:"FLASH",modello:"BIG EYE PRO",pos:"LINEA 1",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
+    {id:"BEY3",cat:"MINI WASH",marca:"FLASH",modello:"BIG EYE PRO",pos:"LINEA 1",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
+    {id:"BEY4",cat:"MINI WASH",marca:"FLASH",modello:"BIG EYE PRO",pos:"LINEA 1",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
+    {id:"STR1",cat:"STROBE",marca:"FLASH",modello:"LEDSTROBE",pos:"LINEA 1",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
+    {id:"STR2",cat:"STROBE",marca:"FLASH",modello:"LEDSTROBE",pos:"N/A",stato:"GUASTA",prop:"Proprietà",gestito:"TOMMASO TANZI",note:"In possesso di Tommaso"},
+    {id:"HAZE1",cat:"SMOKE MACHINE",marca:"ZIPP",modello:"HAZZE1210",pos:"LINEA 4",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
+    {id:"SPK1",cat:"SPARKULAR",marca:"FLASH",modello:"SPARK",pos:"LINEA 1",stato:"IN USO",prop:"Proprietà",gestito:"GD DISTRIBUTION",note:"Installato luglio 2025"},
+    {id:"SPK2",cat:"SPARKULAR",marca:"FLASH",modello:"SPARK",pos:"LINEA 1",stato:"IN USO",prop:"Proprietà",gestito:"GD DISTRIBUTION",note:"Installato luglio 2025"},
+    {id:"SAG1",cat:"SAGOMATORE",marca:"IKON PROFILE",modello:"IKON PROFILE",pos:"LINEA 3",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
+    {id:"SAG2",cat:"SAGOMATORE",marca:"IKON PROFILE",modello:"IKON PROFILE",pos:"LINEA 3",stato:"NON IN USO",prop:"Proprietà",gestito:"",note:""},
+    {id:"SAG3",cat:"SAGOMATORE",marca:"IKON PROFILE",modello:"IKON PROFILE",pos:"LINEA 3",stato:"NON IN USO",prop:"Proprietà",gestito:"",note:""},
+    {id:"SAG4",cat:"SAGOMATORE",marca:"IKON PROFILE",modello:"IKON PROFILE",pos:"LINEA 3",stato:"NON IN USO",prop:"Proprietà",gestito:"",note:""},
+    {id:"AVO1",cat:"CONSOLLE",marca:"AVOLITES",modello:"T3 TITAN MOBILE",pos:"REGIA",stato:"IN USO",prop:"Proprietà",gestito:"TOMMASO",note:"Installata 05/02/2026"},
+    {id:"APC1",cat:"MIDI DEVICE",marca:"AKAI",modello:"APC MINI MK2",pos:"REGIA",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
+    {id:"PROJ1",cat:"PROIETTORE",marca:"N/D",modello:"N/D",pos:"N/D",stato:"IN USO",prop:"Noleggio",gestito:"",note:"A noleggio"},
+    {id:"YMH1",cat:"LOUDSPEAKER",marca:"YAMAHA",modello:"DXR8",pos:"DX 1",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
+    {id:"YMH2",cat:"LOUDSPEAKER",marca:"YAMAHA",modello:"DXR8",pos:"DX 2",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
+    {id:"YMH3",cat:"LOUDSPEAKER",marca:"YAMAHA",modello:"DXR8",pos:"DX 3",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
+    {id:"YMH4",cat:"LOUDSPEAKER",marca:"YAMAHA",modello:"DXR8",pos:"C LEFT",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
+    {id:"YMH5",cat:"LOUDSPEAKER",marca:"YAMAHA",modello:"DXR8",pos:"C RIGHT",stato:"GUASTA",prop:"Proprietà",gestito:"",note:""},
+    {id:"YMH6",cat:"LOUDSPEAKER",marca:"YAMAHA",modello:"DXR8",pos:"SX 2",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
+    {id:"YMH7",cat:"LOUDSPEAKER",marca:"YAMAHA",modello:"DXR8",pos:"SX 1",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
+    {id:"YMH8",cat:"LOUDSPEAKER",marca:"YAMAHA",modello:"DXR8",pos:"SPIA LEFT",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
+    {id:"YMH9",cat:"LOUDSPEAKER",marca:"YAMAHA",modello:"DXR8",pos:"SPIA C",stato:"GUASTA",prop:"Proprietà",gestito:"",note:""},
+    {id:"YMH10",cat:"LOUDSPEAKER",marca:"YAMAHA",modello:"DXR8",pos:"SPIA RIGHT",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
+    {id:"YMH11",cat:"LOUDSPEAKER",marca:"YAMAHA",modello:"DXR8",pos:"SALETTA 1",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
+    {id:"YMH12",cat:"LOUDSPEAKER",marca:"YAMAHA",modello:"DXR8",pos:"SALETTA 2",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
+    {id:"YMHS1",cat:"SUBWOOFER",marca:"YAMAHA",modello:"DXS12",pos:"LEFT",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
+    {id:"YMHS2",cat:"SUBWOOFER",marca:"YAMAHA",modello:"DXS12",pos:"RIGHT",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
+    {id:"SHRSLXD1",cat:"RADIO MICROFONO",marca:"SHURE",modello:"SLXD-SM58",pos:"CORINNA/JESSY",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
+    {id:"SHRSLXD2",cat:"RADIO MICROFONO",marca:"SHURE",modello:"SLXD-SM58",pos:"GERARDO/LUCA",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
+    {id:"SHRSLXD3",cat:"RADIO MICROFONO",marca:"SHURE",modello:"SLXD-SM58",pos:"MARINA",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
+    {id:"SHRSLXD4",cat:"RADIO MICROFONO",marca:"SHURE",modello:"SLXD-SM58",pos:"GIOVANNI/MARIANO",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
+    {id:"SENHXSW1",cat:"RADIO MICROFONO",marca:"SENNHEISER",modello:"EWG3-BODYPACK",pos:"TROMBA 1 ANDREA",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
+    {id:"SENHXSW2",cat:"RADIO MICROFONO",marca:"SENNHEISER",modello:"EWG3-BODYPACK",pos:"TROMBA 2 SIMONE",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
+    {id:"SENHEW1",cat:"RADIO MICROFONO",marca:"SENNHEISER",modello:"XSW-BODYPACK",pos:"VIOLINO/CAJON",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
+    {id:"SENHEW2",cat:"RADIO MICROFONO",marca:"SENNHEISER",modello:"XSW-BODYPACK",pos:"N/A",stato:"NON IN USO",prop:"Proprietà",gestito:"",note:""},
+    {id:"SENHEW3",cat:"RADIO MICROFONO",marca:"SENNHEISER",modello:"EWG4 GELATO",pos:"N/A",stato:"NON IN USO",prop:"Proprietà",gestito:"",note:""},
+    {id:"SHRSLXD5",cat:"RICEVITORE RF",marca:"SHURE",modello:"SLXD 4D",pos:"REGIA",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
+    {id:"SHRSLXD6",cat:"RICEVITORE RF",marca:"SHURE",modello:"SLXD 4D",pos:"REGIA",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
+    {id:"SENHXSW3",cat:"RICEVITORE RF",marca:"SENNHEISER",modello:"XS WIRELESS 2",pos:"REGIA",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
+    {id:"SENHXSW4",cat:"RICEVITORE RF",marca:"SENNHEISER",modello:"XS WIRELESS 2",pos:"REGIA",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
+    {id:"SENHEW4",cat:"RICEVITORE RF",marca:"SENNHEISER",modello:"EW100 G3",pos:"REGIA",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
+    {id:"SENHEW5",cat:"RICEVITORE RF",marca:"SENNHEISER",modello:"EW100 G3",pos:"REGIA",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
+    {id:"SENHEW6",cat:"RICEVITORE RF",marca:"SENNHEISER",modello:"EW100 G3",pos:"REGIA",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
+    {id:"SENHANT1",cat:"ANTENNE RF",marca:"SENNHEISER",modello:"",pos:"REGIA",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
+    {id:"SENHANT2",cat:"ANTENNE RF",marca:"SENNHEISER",modello:"",pos:"REGIA",stato:"IN USO",prop:"Proprietà",gestito:"",note:""},
+  ];
+  const rips = [
+    {rid:"r1",art_id:"JB1",dguasto:"2026-04-28",dritiro:"2026-06-05",driconsegna:"",fornitore:"ET2",motivo:"",costo:null,stato_dopo:"IN USO",note:""},
+    {rid:"r2",art_id:"JB2",dguasto:"2026-04-28",dritiro:"2026-06-05",driconsegna:"",fornitore:"ET2",motivo:"",costo:null,stato_dopo:"IN USO",note:""},
+    {rid:"r3",art_id:"ADJ1",dguasto:"2026-01-14",dritiro:"2026-03-18",driconsegna:"2026-03-18",fornitore:"GD DISTRIBUTION",motivo:"",costo:null,stato_dopo:"IN USO",note:""},
+    {rid:"r4",art_id:"ADJ2",dguasto:"2026-05-11",dritiro:"",driconsegna:"",fornitore:"GD DISTRIBUTION",motivo:"",costo:null,stato_dopo:"IN RIPARAZIONE",note:""},
+    {rid:"r5",art_id:"ADJX",dguasto:"2026-05-11",dritiro:"",driconsegna:"",fornitore:"GD DISTRIBUTION",motivo:"",costo:null,stato_dopo:"IN RIPARAZIONE",note:""},
+    {rid:"r6",art_id:"ADJ8",dguasto:"2026-01-14",dritiro:"2026-03-18",driconsegna:"2026-03-18",fornitore:"GD DISTRIBUTION",motivo:"",costo:null,stato_dopo:"IN USO",note:""},
+    {rid:"r7",art_id:"STR2",dguasto:"2026-02-06",dritiro:"",driconsegna:"",fornitore:"TOMMASO TANZI",motivo:"In possesso di Tommaso",costo:null,stato_dopo:"GUASTA",note:""},
+    {rid:"r8",art_id:"SPK1",dguasto:"2026-01-14",dritiro:"2026-03-18",driconsegna:"2026-03-18",fornitore:"GD DISTRIBUTION",motivo:"",costo:null,stato_dopo:"IN USO",note:""},
+    {rid:"r9",art_id:"SPK2",dguasto:"2026-01-14",dritiro:"2026-03-18",driconsegna:"2026-03-18",fornitore:"GD DISTRIBUTION",motivo:"",costo:null,stato_dopo:"IN USO",note:""},
+  ];
+  const nol = [{nid:"n1",descrizione:"Proiettore",fornitore:"N/D",costo_mensile:220,inizio:"",scadenza:"",note:"Noleggio proiettore sala principale"}];
+  await sb.from('articoli').insert(arts);
+  await sb.from('riparazioni').insert(rips);
+  await sb.from('noleggi').insert(nol);
+  const [a,r,n] = await Promise.all([
+    sb.from('articoli').select('*').order('cat').order('id'),
+    sb.from('riparazioni').select('*').order('dguasto'),
+    sb.from('noleggi').select('*')
+  ]);
+  articoli=a.data||[]; riparazioni=r.data||[]; noleggi=n.data||[];
+}
+
+// ── HELPERS ───────────────────────────────────────────────────────────────
 function uid(){return 'id_'+Date.now()+'_'+Math.random().toString(36).substr(2,5);}
-function fmt(d){if(!d)return'—';const p=d.split('-');return p.length===3?`${p[2]}/${p[1]}/${p[0]}`:d;}
-function fmtEur(v){if(v===''||v===null||v===undefined)return'—';return'€'+parseFloat(v).toLocaleString('it-IT',{minimumFractionDigits:2,maximumFractionDigits:2});}
-function getRipByArt(id){return riparazioni.filter(r=>r.artId===id);}
-function getCostoTotRip(id){return getRipByArt(id).reduce((s,r)=>s+(parseFloat(r.costo)||0),0);}
+function fmt(d){if(!d)return'—';return d.split('-').reverse().join('/');}
+function fmtEur(v){if(!v&&v!==0)return'—';return'€'+parseFloat(v).toLocaleString('it-IT',{minimumFractionDigits:2,maximumFractionDigits:2});}
+function getRipByArt(id){return riparazioni.filter(r=>r.art_id===id);}
+function getCostoTot(id){return getRipByArt(id).reduce((s,r)=>s+(parseFloat(r.costo)||0),0);}
 function statoBadge(s){if(s==='IN USO')return`<span class="badge b-uso">In uso</span>`;if(s==='IN RIPARAZIONE')return`<span class="badge b-ripar">In riparazione</span>`;if(s==='GUASTA')return`<span class="badge b-guasto">Guasta</span>`;return`<span class="badge b-nouse">Non in uso</span>`;}
-function showPage(id){document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));document.getElementById('page-'+id).classList.add('active');const map={dashboard:0,inventario:1,riparazioni:2,noleggio:3,costi:4};document.querySelectorAll('.nav-btn')[map[id]].classList.add('active');if(id==='dashboard')renderDashboard();if(id==='inventario'){renderInventario();populateInvCats();}if(id==='riparazioni')renderRiparazioni();if(id==='noleggio')renderNoleggio();if(id==='costi')renderCosti();}
+function showPage(id){document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));document.getElementById('page-'+id).classList.add('active');const map={dashboard:0,inventario:1,riparazioni:2,noleggio:3,costi:4};document.querySelectorAll('.nav-btn')[map[id]].classList.add('active');if(id==='inventario'){renderInventario();populateInvCats();}if(id==='riparazioni')renderRiparazioni();if(id==='noleggio')renderNoleggio();if(id==='costi')renderCosti();}
 function closeModal(id){document.getElementById(id).classList.remove('open');}
+function refreshAll(){renderDashboard();const cp=document.querySelector('.page.active');if(cp.id==='page-inventario'){renderInventario();populateInvCats();}if(cp.id==='page-riparazioni')renderRiparazioni();if(cp.id==='page-noleggio')renderNoleggio();if(cp.id==='page-costi')renderCosti();}
 
-function renderDashboard(){const tot=articoli.length,inuso=articoli.filter(a=>a.stato==='IN USO').length,ripar=articoli.filter(a=>a.stato==='IN RIPARAZIONE').length,guaste=articoli.filter(a=>a.stato==='GUASTA').length;const totCostoRip=riparazioni.reduce((s,r)=>s+(parseFloat(r.costo)||0),0),totNolMensile=noleggi.reduce((s,n)=>s+(parseFloat(n.costoMensile)||0),0);document.getElementById('stats-grid').innerHTML=`<div class="stat-card"><div class="stat-val purple">${tot}</div><div class="stat-lbl">Totale attrezzatura</div></div><div class="stat-card"><div class="stat-val green">${inuso}</div><div class="stat-lbl">In uso</div></div><div class="stat-card"><div class="stat-val amber">${ripar}</div><div class="stat-lbl">In riparazione</div></div><div class="stat-card"><div class="stat-val red">${guaste}</div><div class="stat-lbl">Guaste</div></div><div class="stat-card"><div class="stat-val blue">${riparazioni.length}</div><div class="stat-lbl">Riparazioni totali</div></div><div class="stat-card"><div class="stat-val red">${totCostoRip>0?fmtEur(totCostoRip):'—'}</div><div class="stat-lbl">Costo tot. riparazioni</div></div><div class="stat-card"><div class="stat-val blue">${fmtEur(totNolMensile)}/mese</div><div class="stat-lbl">Noleggio mensile</div><div class="stat-sub">${fmtEur(totNolMensile*12)}/anno</div></div>`;const alerts=[];if(guaste>0)alerts.push(`<div class="alert alert-r">⚠ ${guaste} articol${guaste>1?'i':'o'} guast${guaste>1?'i':'o'} — verificare stato</div>`);if(ripar>0)alerts.push(`<div class="alert alert-a">🔧 ${ripar} articol${ripar>1?'i':'o'} in riparazione</div>`);document.getElementById('alerts-box').innerHTML=alerts.join('');const problemi=articoli.filter(a=>a.stato!=='IN USO'&&a.stato!=='NON IN USO');document.getElementById('dash-table').innerHTML=problemi.length===0?'<tr><td colspan="8" class="empty">✅ Nessun problema aperto</td></tr>':problemi.map(a=>{const rips=getRipByArt(a.id),costo=getCostoTotRip(a.id);return`<tr onclick="openStorico('${a.id}')"><td class="code">${a.id}</td><td>${a.cat}</td><td style="font-weight:600">${a.marca} ${a.modello}</td><td>${statoBadge(a.stato)}</td><td style="color:#9ca3af;font-size:11px">${rips.length>0?fmt(rips[rips.length-1].dguasto):'—'}</td><td style="color:#9ca3af">${a.gestito||'—'}</td><td style="text-align:center"><span class="badge b-ripar">${rips.length}</span></td><td style="font-weight:600;color:${costo>0?'#34d399':'#4b5563'}">${costo>0?fmtEur(costo):'—'}</td></tr>`;}).join('');}
+// ── DASHBOARD ─────────────────────────────────────────────────────────────
+function renderDashboard(){
+  const tot=articoli.length,inuso=articoli.filter(a=>a.stato==='IN USO').length,ripar=articoli.filter(a=>a.stato==='IN RIPARAZIONE').length,guaste=articoli.filter(a=>a.stato==='GUASTA').length;
+  const totCosto=riparazioni.reduce((s,r)=>s+(parseFloat(r.costo)||0),0),totNol=noleggi.reduce((s,n)=>s+(parseFloat(n.costo_mensile)||0),0);
+  document.getElementById('stats-grid').innerHTML=`<div class="stat-card"><div class="stat-val purple">${tot}</div><div class="stat-lbl">Totale attrezzatura</div></div><div class="stat-card"><div class="stat-val green">${inuso}</div><div class="stat-lbl">In uso</div></div><div class="stat-card"><div class="stat-val amber">${ripar}</div><div class="stat-lbl">In riparazione</div></div><div class="stat-card"><div class="stat-val red">${guaste}</div><div class="stat-lbl">Guaste</div></div><div class="stat-card"><div class="stat-val blue">${riparazioni.length}</div><div class="stat-lbl">Riparazioni totali</div></div><div class="stat-card"><div class="stat-val red">${totCosto>0?fmtEur(totCosto):'—'}</div><div class="stat-lbl">Costo tot. riparazioni</div></div><div class="stat-card"><div class="stat-val blue">${fmtEur(totNol)}/mese</div><div class="stat-lbl">Noleggio mensile</div><div class="stat-sub">${fmtEur(totNol*12)}/anno</div></div>`;
+  const alerts=[];if(guaste>0)alerts.push(`<div class="alert alert-r">⚠ ${guaste} articoli guasti</div>`);if(ripar>0)alerts.push(`<div class="alert alert-a">🔧 ${ripar} articoli in riparazione</div>`);
+  document.getElementById('alerts-box').innerHTML=alerts.join('');
+  const problemi=articoli.filter(a=>a.stato!=='IN USO'&&a.stato!=='NON IN USO');
+  document.getElementById('dash-table').innerHTML=problemi.length===0?'<tr><td colspan="8" class="empty">✅ Nessun problema aperto</td></tr>':problemi.map(a=>{const rips=getRipByArt(a.id),costo=getCostoTot(a.id);return`<tr onclick="openStorico('${a.id}')"><td class="code">${a.id}</td><td>${a.cat}</td><td style="font-weight:600">${a.marca} ${a.modello}</td><td>${statoBadge(a.stato)}</td><td style="color:#9ca3af;font-size:11px">${rips.length>0?fmt(rips[rips.length-1].dguasto):'—'}</td><td style="color:#9ca3af">${a.gestito||'—'}</td><td style="text-align:center"><span class="badge b-ripar">${rips.length}</span></td><td style="font-weight:600;color:${costo>0?'#34d399':'#4b5563'}">${costo>0?fmtEur(costo):'—'}</td></tr>`;}).join('');}
 
+// ── INVENTARIO ────────────────────────────────────────────────────────────
 function populateInvCats(){const cats=[...new Set(articoli.map(a=>a.cat))].sort();document.getElementById('inv-cat').innerHTML='<option value="">Tutte le categorie</option>'+cats.map(c=>`<option value="${c}">${c}</option>`).join('');}
-function renderInventario(){const q=document.getElementById('inv-search').value.toLowerCase(),cat=document.getElementById('inv-cat').value,stato=document.getElementById('inv-stato').value,prop=document.getElementById('inv-prop').value;const filtered=articoli.filter(a=>{const m=!q||[a.id,a.cat,a.marca,a.modello,a.pos,a.gestito].some(v=>v&&v.toLowerCase().includes(q));return m&&(!cat||a.cat===cat)&&(!stato||a.stato===stato)&&(!prop||a.prop===prop);});if(!filtered.length){document.getElementById('inv-table').innerHTML='';document.getElementById('inv-empty').style.display='block';return;}document.getElementById('inv-empty').style.display='none';document.getElementById('inv-table').innerHTML=filtered.map(a=>{const idx=articoli.indexOf(a),rips=getRipByArt(a.id),costo=getCostoTotRip(a.id);return`<tr onclick="openStorico('${a.id}')"><td class="code">${a.id}</td><td><span class="badge b-prop" style="font-size:10px">${a.cat}</span></td><td style="font-weight:600">${a.marca}</td><td style="color:#9ca3af">${a.modello}</td><td style="color:#c4b5fd;font-size:11px">${a.pos}</td><td>${statoBadge(a.stato)}</td><td><span class="badge ${a.prop==='Noleggio'?'b-nol':'b-prop'}">${a.prop==='Noleggio'?'🔄 Noleggio':'✓ Proprietà'}</span></td><td style="text-align:center;color:${rips.length>2?'#f87171':rips.length>0?'#fbbf24':'#6b7280'}">${rips.length}</td><td style="font-weight:600;color:${costo>0?'#34d399':'#4b5563'}">${costo>0?fmtEur(costo):'—'}</td><td style="display:flex;gap:4px"><button class="btn-g btn" onclick="event.stopPropagation();openStorico('${a.id}')">📋</button><button class="btn-a btn" onclick="event.stopPropagation();editArticolo(${idx})">✏</button></td></tr>`;}).join('');}
+function renderInventario(){const q=document.getElementById('inv-search').value.toLowerCase(),cat=document.getElementById('inv-cat').value,stato=document.getElementById('inv-stato').value,prop=document.getElementById('inv-prop').value;const filtered=articoli.filter(a=>{const m=!q||[a.id,a.cat,a.marca,a.modello,a.pos,a.gestito].some(v=>v&&v.toLowerCase().includes(q));return m&&(!cat||a.cat===cat)&&(!stato||a.stato===stato)&&(!prop||a.prop===prop);});if(!filtered.length){document.getElementById('inv-table').innerHTML='';document.getElementById('inv-empty').style.display='block';return;}document.getElementById('inv-empty').style.display='none';document.getElementById('inv-table').innerHTML=filtered.map(a=>{const rips=getRipByArt(a.id),costo=getCostoTot(a.id);return`<tr onclick="openStorico('${a.id}')"><td class="code">${a.id}</td><td><span class="badge b-prop" style="font-size:10px">${a.cat}</span></td><td style="font-weight:600">${a.marca}</td><td style="color:#9ca3af">${a.modello}</td><td style="color:#c4b5fd;font-size:11px">${a.pos}</td><td>${statoBadge(a.stato)}</td><td><span class="badge ${a.prop==='Noleggio'?'b-nol':'b-prop'}">${a.prop==='Noleggio'?'🔄 Noleggio':'✓ Proprietà'}</span></td><td style="text-align:center;color:${rips.length>2?'#f87171':rips.length>0?'#fbbf24':'#6b7280'}">${rips.length}</td><td style="font-weight:600;color:${costo>0?'#34d399':'#4b5563'}">${costo>0?fmtEur(costo):'—'}</td><td style="display:flex;gap:4px"><button class="btn btn-g" onclick="event.stopPropagation();openStorico('${a.id}')">📋</button><button class="btn btn-a" onclick="event.stopPropagation();editArticolo('${a.id}')">✏</button></td></tr>`;}).join('');}
 function clearInvFilters(){document.getElementById('inv-search').value='';document.getElementById('inv-cat').value='';document.getElementById('inv-stato').value='';document.getElementById('inv-prop').value='';renderInventario();}
-function openAddArticolo(){editArtIdx=-1;document.getElementById('modal-articolo-title').textContent='Nuovo articolo';['a-cat','a-cod','a-marca','a-modello','a-pos','a-gestito','a-note'].forEach(id=>document.getElementById(id).value='');document.getElementById('a-prop').value='Proprietà';document.getElementById('a-stato').value='IN USO';document.getElementById('modal-articolo').classList.add('open');}
-function editArticolo(idx){editArtIdx=idx;const a=articoli[idx];document.getElementById('modal-articolo-title').textContent=`Modifica — ${a.marca} ${a.modello} (${a.id})`;document.getElementById('a-cat').value=a.cat;document.getElementById('a-cod').value=a.id;document.getElementById('a-marca').value=a.marca;document.getElementById('a-modello').value=a.modello;document.getElementById('a-pos').value=a.pos;document.getElementById('a-prop').value=a.prop;document.getElementById('a-stato').value=a.stato;document.getElementById('a-gestito').value=a.gestito;document.getElementById('a-note').value=a.note;document.getElementById('modal-articolo').classList.add('open');}
-function saveArticolo(){const item={id:document.getElementById('a-cod').value,cat:document.getElementById('a-cat').value,marca:document.getElementById('a-marca').value,modello:document.getElementById('a-modello').value,pos:document.getElementById('a-pos').value,prop:document.getElementById('a-prop').value,stato:document.getElementById('a-stato').value,gestito:document.getElementById('a-gestito').value,note:document.getElementById('a-note').value};if(editArtIdx>=0)articoli[editArtIdx]=item;else articoli.push(item);closeModal('modal-articolo');save();renderInventario();renderDashboard();}
 
-function openStorico(artId){storicoArtId=artId;const a=articoli.find(x=>x.id===artId);if(!a)return;const rips=getRipByArt(artId),costo=getCostoTotRip(artId);document.getElementById('storico-title').textContent=`${a.marca} ${a.modello} — ${a.id}`;document.getElementById('storico-stats').innerHTML=`<div class="stat-card"><div class="stat-val amber">${rips.length}</div><div class="stat-lbl">Riparazioni totali</div></div><div class="stat-card"><div class="stat-val red">${fmtEur(costo)}</div><div class="stat-lbl">Costo totale riparazioni</div></div><div class="stat-card"><div class="stat-val">${statoBadge(a.stato)}</div><div class="stat-lbl">Stato attuale</div></div>`;if(!rips.length){document.getElementById('storico-list').innerHTML='<div class="empty">Nessuna riparazione registrata per questo articolo.</div>';}else{document.getElementById('storico-list').innerHTML=rips.map((r,i)=>{const chiusa=!!r.driconsegna;return`<div class="storico-item"><div class="storico-header"><div><div class="storico-date">Riparazione #${i+1} — Guasto: ${fmt(r.dguasto)}</div><div style="font-size:10px;color:#6b7280;margin-top:2px">Fornitore: ${r.fornitore||'—'}</div></div><div style="text-align:right"><div class="storico-costo">${r.costo?fmtEur(r.costo):'Costo da inserire'}</div><div style="font-size:10px;margin-top:2px">${chiusa?'<span style="color:#34d399">✓ Chiusa</span>':'<span style="color:#fbbf24">⏳ Aperta</span>'}</div></div></div><div class="storico-detail">${r.motivo?`<div><strong>Motivo:</strong> ${r.motivo}</div>`:''}<div><strong>Ritiro:</strong> ${fmt(r.dritiro)} &nbsp;|&nbsp; <strong>Riconsegna:</strong> ${fmt(r.driconsegna)}</div>${r.note?`<div><strong>Note:</strong> ${r.note}</div>`:''}</div></div>`;}).join('');}document.getElementById('modal-storico').classList.add('open');}
+function openAddArticolo(){editArtId=null;document.getElementById('modal-articolo-title').textContent='Nuovo articolo';['a-cat','a-cod','a-marca','a-modello','a-pos','a-gestito','a-note'].forEach(id=>document.getElementById(id).value='');document.getElementById('a-prop').value='Proprietà';document.getElementById('a-stato').value='IN USO';document.getElementById('modal-articolo').classList.add('open');}
+function editArticolo(id){editArtId=id;const a=articoli.find(x=>x.id===id);if(!a)return;document.getElementById('modal-articolo-title').textContent=`Modifica — ${a.marca} ${a.modello} (${a.id})`;document.getElementById('a-cat').value=a.cat;document.getElementById('a-cod').value=a.id;document.getElementById('a-marca').value=a.marca;document.getElementById('a-modello').value=a.modello;document.getElementById('a-pos').value=a.pos;document.getElementById('a-prop').value=a.prop;document.getElementById('a-stato').value=a.stato;document.getElementById('a-gestito').value=a.gestito||'';document.getElementById('a-note').value=a.note||'';document.getElementById('modal-articolo').classList.add('open');}
+async function saveArticolo(){const item={id:document.getElementById('a-cod').value,cat:document.getElementById('a-cat').value,marca:document.getElementById('a-marca').value,modello:document.getElementById('a-modello').value,pos:document.getElementById('a-pos').value,prop:document.getElementById('a-prop').value,stato:document.getElementById('a-stato').value,gestito:document.getElementById('a-gestito').value,note:document.getElementById('a-note').value};const {error}=editArtId?await sb.from('articoli').update(item).eq('id',editArtId):await sb.from('articoli').insert(item);if(error)alert('Errore: '+error.message);else{closeModal('modal-articolo');await loadAll();}}
+
+// ── STORICO ───────────────────────────────────────────────────────────────
+function openStorico(artId){storicoArtId=artId;const a=articoli.find(x=>x.id===artId);if(!a)return;const rips=getRipByArt(artId),costo=getCostoTot(artId);document.getElementById('storico-title').textContent=`${a.marca} ${a.modello} — ${a.id}`;document.getElementById('storico-stats').innerHTML=`<div class="stat-card"><div class="stat-val amber">${rips.length}</div><div class="stat-lbl">Riparazioni totali</div></div><div class="stat-card"><div class="stat-val red">${fmtEur(costo)}</div><div class="stat-lbl">Costo totale</div></div><div class="stat-card"><div class="stat-val">${statoBadge(a.stato)}</div><div class="stat-lbl">Stato attuale</div></div>`;if(!rips.length){document.getElementById('storico-list').innerHTML='<div class="empty">Nessuna riparazione registrata.</div>';}else{document.getElementById('storico-list').innerHTML=rips.map((r,i)=>{const chiusa=!!r.driconsegna;return`<div class="storico-item"><div class="storico-header"><div><div class="storico-date">Riparazione #${i+1} — Guasto: ${fmt(r.dguasto)}</div><div style="font-size:10px;color:#6b7280;margin-top:2px">Fornitore: ${r.fornitore||'—'}</div></div><div style="text-align:right"><div class="storico-costo">${r.costo?fmtEur(r.costo):'Costo da inserire'}</div><div style="font-size:10px;margin-top:2px">${chiusa?'<span style="color:#34d399">✓ Chiusa</span>':'<span style="color:#fbbf24">⏳ Aperta</span>'}</div></div></div><div class="storico-detail">${r.motivo?`<div><strong>Motivo:</strong> ${r.motivo}</div>`:''}<div><strong>Ritiro:</strong> ${fmt(r.dritiro)} | <strong>Riconsegna:</strong> ${fmt(r.driconsegna)}</div>${r.note?`<div><strong>Note:</strong> ${r.note}</div>`:''}</div></div>`;}).join('');}document.getElementById('modal-storico').classList.add('open');}
 function openAddRiparazioneFromStorico(){closeModal('modal-storico');openAddRiparazione(storicoArtId);}
 
-function renderRiparazioni(){const q=document.getElementById('rip-search').value.toLowerCase(),f=document.getElementById('rip-filter').value;let filtered=riparazioni.filter(r=>{const a=articoli.find(x=>x.id===r.artId)||{};const m=!q||[r.artId,r.fornitore,r.motivo,r.note,a.marca,a.modello,a.cat].some(v=>v&&v.toLowerCase().includes(q));const sf=!f||(f==='aperta'&&!r.driconsegna)||(f==='chiusa'&&!!r.driconsegna);return m&&sf;});if(!filtered.length){document.getElementById('rip-table').innerHTML='';document.getElementById('rip-empty').style.display='block';return;}document.getElementById('rip-empty').style.display='none';document.getElementById('rip-table').innerHTML=filtered.map(r=>{const a=articoli.find(x=>x.id===r.artId)||{},chiusa=!!r.driconsegna,idx=riparazioni.indexOf(r);return`<tr><td style="font-weight:600">${a.marca||'—'} ${a.modello||''}</td><td class="code">${r.artId}</td><td style="font-size:11px;color:#9ca3af">${fmt(r.dguasto)}</td><td style="font-size:11px;color:#9ca3af">${fmt(r.dritiro)}</td><td style="font-size:11px;color:${chiusa?'#34d399':'#fbbf24'}">${fmt(r.driconsegna)}</td><td style="color:#9ca3af">${r.fornitore||'—'}</td><td style="color:#9ca3af;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.motivo||'—'}</td><td style="font-weight:600;color:${r.costo?'#34d399':'#4b5563'}">${r.costo?fmtEur(r.costo):'—'}</td><td><span class="badge ${chiusa?'b-uso':'b-ripar'}">${chiusa?'Chiusa':'Aperta'}</span></td><td><button class="btn btn-a" onclick="editRiparazione(${idx})">✏</button></td></tr>`;}).join('');}
+// ── RIPARAZIONI ───────────────────────────────────────────────────────────
+function renderRiparazioni(){const q=document.getElementById('rip-search').value.toLowerCase(),f=document.getElementById('rip-filter').value;let filtered=riparazioni.filter(r=>{const a=articoli.find(x=>x.id===r.art_id)||{};const m=!q||[r.art_id,r.fornitore,r.motivo,r.note,a.marca,a.modello].some(v=>v&&v.toLowerCase().includes(q));return m&&(!f||(f==='aperta'&&!r.driconsegna)||(f==='chiusa'&&!!r.driconsegna));});if(!filtered.length){document.getElementById('rip-table').innerHTML='';document.getElementById('rip-empty').style.display='block';return;}document.getElementById('rip-empty').style.display='none';document.getElementById('rip-table').innerHTML=filtered.map(r=>{const a=articoli.find(x=>x.id===r.art_id)||{},chiusa=!!r.driconsegna;return`<tr><td style="font-weight:600">${a.marca||'—'} ${a.modello||''}</td><td class="code">${r.art_id}</td><td style="font-size:11px;color:#9ca3af">${fmt(r.dguasto)}</td><td style="font-size:11px;color:#9ca3af">${fmt(r.dritiro)}</td><td style="font-size:11px;color:${chiusa?'#34d399':'#fbbf24'}">${fmt(r.driconsegna)}</td><td style="color:#9ca3af">${r.fornitore||'—'}</td><td style="color:#9ca3af;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.motivo||'—'}</td><td style="font-weight:600;color:${r.costo?'#34d399':'#4b5563'}">${r.costo?fmtEur(r.costo):'—'}</td><td><span class="badge ${chiusa?'b-uso':'b-ripar'}">${chiusa?'Chiusa':'Aperta'}</span></td><td><button class="btn btn-a" onclick="editRiparazione('${r.rid}')">✏</button></td></tr>`;}).join('');}
+
 function populateArtSelect(selectedId){const sel=document.getElementById('r-articolo');sel.innerHTML='<option value="">Seleziona articolo...</option>'+articoli.map(a=>`<option value="${a.id}" ${a.id===selectedId?'selected':''}>${a.id} — ${a.marca} ${a.modello}</option>`).join('');}
-function openAddRiparazione(preselArtId){editRipIdx=-1;document.getElementById('modal-rip-title').textContent='Nuova riparazione';populateArtSelect(preselArtId||null);['r-dguasto','r-dritiro','r-driconsegna','r-fornitore','r-motivo','r-note'].forEach(id=>document.getElementById(id).value='');document.getElementById('r-costo').value='';document.getElementById('r-stato-dopo').value='IN USO';document.getElementById('modal-riparazione').classList.add('open');}
-function editRiparazione(idx){editRipIdx=idx;const r=riparazioni[idx];document.getElementById('modal-rip-title').textContent='Modifica riparazione';populateArtSelect(r.artId);document.getElementById('r-dguasto').value=r.dguasto||'';document.getElementById('r-dritiro').value=r.dritiro||'';document.getElementById('r-driconsegna').value=r.driconsegna||'';document.getElementById('r-fornitore').value=r.fornitore||'';document.getElementById('r-motivo').value=r.motivo||'';document.getElementById('r-costo').value=r.costo||'';document.getElementById('r-stato-dopo').value=r.statoDopoRipar||'IN USO';document.getElementById('r-note').value=r.note||'';document.getElementById('modal-riparazione').classList.add('open');}
-function saveRiparazione(){const artId=document.getElementById('r-articolo').value;if(!artId)return;const item={rid:editRipIdx>=0?riparazioni[editRipIdx].rid:uid(),artId,dguasto:document.getElementById('r-dguasto').value,dritiro:document.getElementById('r-dritiro').value,driconsegna:document.getElementById('r-driconsegna').value,fornitore:document.getElementById('r-fornitore').value,motivo:document.getElementById('r-motivo').value,costo:document.getElementById('r-costo').value,statoDopoRipar:document.getElementById('r-stato-dopo').value,note:document.getElementById('r-note').value};if(editRipIdx>=0)riparazioni[editRipIdx]=item;else riparazioni.push(item);const a=articoli.find(x=>x.id===artId);if(a)a.stato=item.statoDopoRipar;closeModal('modal-riparazione');save();renderRiparazioni();renderDashboard();}
+function openAddRiparazione(preselId){editRipId=null;document.getElementById('modal-rip-title').textContent='Nuova riparazione';populateArtSelect(preselId);['r-dguasto','r-dritiro','r-driconsegna','r-fornitore','r-motivo','r-note'].forEach(id=>document.getElementById(id).value='');document.getElementById('r-costo').value='';document.getElementById('r-stato-dopo').value='IN USO';document.getElementById('modal-riparazione').classList.add('open');}
+function editRiparazione(rid){editRipId=rid;const r=riparazioni.find(x=>x.rid===rid);if(!r)return;document.getElementById('modal-rip-title').textContent='Modifica riparazione';populateArtSelect(r.art_id);document.getElementById('r-dguasto').value=r.dguasto||'';document.getElementById('r-dritiro').value=r.dritiro||'';document.getElementById('r-driconsegna').value=r.driconsegna||'';document.getElementById('r-fornitore').value=r.fornitore||'';document.getElementById('r-motivo').value=r.motivo||'';document.getElementById('r-costo').value=r.costo||'';document.getElementById('r-stato-dopo').value=r.stato_dopo||'IN USO';document.getElementById('r-note').value=r.note||'';document.getElementById('modal-riparazione').classList.add('open');}
+async function saveRiparazione(){const artId=document.getElementById('r-articolo').value;if(!artId)return;const item={rid:editRipId||uid(),art_id:artId,dguasto:document.getElementById('r-dguasto').value||null,dritiro:document.getElementById('r-dritiro').value||null,driconsegna:document.getElementById('r-driconsegna').value||null,fornitore:document.getElementById('r-fornitore').value,motivo:document.getElementById('r-motivo').value,costo:parseFloat(document.getElementById('r-costo').value)||null,stato_dopo:document.getElementById('r-stato-dopo').value,note:document.getElementById('r-note').value};const {error:re}=editRipId?await sb.from('riparazioni').update(item).eq('rid',editRipId):await sb.from('riparazioni').insert(item);if(re){alert('Errore: '+re.message);return;}await sb.from('articoli').update({stato:item.stato_dopo}).eq('id',artId);closeModal('modal-riparazione');await loadAll();}
 
-function renderNoleggio(){const list=document.getElementById('noleggio-list');if(!noleggi.length){list.innerHTML='<div class="empty">Nessun noleggio registrato.</div>';return;}const totMensile=noleggi.reduce((s,n)=>s+(parseFloat(n.costoMensile)||0),0);list.innerHTML=`<div class="stats-grid" style="margin-bottom:16px"><div class="stat-card"><div class="stat-val blue">${noleggi.length}</div><div class="stat-lbl">Contratti attivi</div></div><div class="stat-card"><div class="stat-val blue">${fmtEur(totMensile)}</div><div class="stat-lbl">Costo mensile</div></div><div class="stat-card"><div class="stat-val red">${fmtEur(totMensile*12)}</div><div class="stat-lbl">Costo annuo</div></div></div>${noleggi.map((n,i)=>`<div class="cost-box"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><div class="cost-box-title">${n.desc}</div><button class="btn btn-a" onclick="editNoleggio(${i})">✏ Modifica</button></div><div class="cost-row"><span>Fornitore</span><span class="cost-val">${n.fornitore||'—'}</span></div><div class="cost-row"><span>Costo mensile</span><span class="cost-val blue">${fmtEur(n.costoMensile)}/mese</span></div><div class="cost-row"><span>Costo annuo</span><span class="cost-val red">${fmtEur((parseFloat(n.costoMensile)||0)*12)}/anno</span></div><div class="cost-row"><span>Inizio</span><span class="cost-val">${fmt(n.inizio)}</span></div><div class="cost-row"><span>Scadenza</span><span class="cost-val">${fmt(n.scadenza)}</span></div>${n.note?`<div class="cost-row"><span>Note</span><span class="cost-val" style="font-size:11px">${n.note}</span></div>`:''}</div>`).join('')}`;}
-function openAddNoleggio(){editNolIdx=-1;document.getElementById('modal-nol-title').textContent='Nuovo noleggio';['n-desc','n-fornitore','n-inizio','n-scadenza','n-note'].forEach(id=>document.getElementById(id).value='');document.getElementById('n-costo').value='';document.getElementById('modal-noleggio').classList.add('open');}
-function editNoleggio(idx){editNolIdx=idx;const n=noleggi[idx];document.getElementById('modal-nol-title').textContent='Modifica noleggio';document.getElementById('n-desc').value=n.desc;document.getElementById('n-fornitore').value=n.fornitore;document.getElementById('n-costo').value=n.costoMensile;document.getElementById('n-inizio').value=n.inizio;document.getElementById('n-scadenza').value=n.scadenza;document.getElementById('n-note').value=n.note;document.getElementById('modal-noleggio').classList.add('open');}
-function saveNoleggio(){const item={nid:editNolIdx>=0?noleggi[editNolIdx].nid:uid(),desc:document.getElementById('n-desc').value,fornitore:document.getElementById('n-fornitore').value,costoMensile:parseFloat(document.getElementById('n-costo').value)||0,inizio:document.getElementById('n-inizio').value,scadenza:document.getElementById('n-scadenza').value,note:document.getElementById('n-note').value};if(editNolIdx>=0)noleggi[editNolIdx]=item;else noleggi.push(item);closeModal('modal-noleggio');save();renderNoleggio();}
+// ── NOLEGGIO ──────────────────────────────────────────────────────────────
+function renderNoleggio(){const list=document.getElementById('noleggio-list');if(!noleggi.length){list.innerHTML='<div class="empty">Nessun noleggio.</div>';return;}const tot=noleggi.reduce((s,n)=>s+(parseFloat(n.costo_mensile)||0),0);list.innerHTML=`<div class="stats-grid" style="margin-bottom:16px"><div class="stat-card"><div class="stat-val blue">${noleggi.length}</div><div class="stat-lbl">Contratti attivi</div></div><div class="stat-card"><div class="stat-val blue">${fmtEur(tot)}/mese</div><div class="stat-lbl">Costo mensile</div></div><div class="stat-card"><div class="stat-val red">${fmtEur(tot*12)}/anno</div><div class="stat-lbl">Costo annuo</div></div></div>${noleggi.map((n,i)=>`<div class="cost-box"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><div class="cost-box-title">${n.descrizione}</div><button class="btn btn-a" onclick="editNoleggio('${n.nid}')">✏ Modifica</button></div><div class="cost-row"><span>Fornitore</span><span class="cost-val">${n.fornitore||'—'}</span></div><div class="cost-row"><span>Costo mensile</span><span class="cost-val blue">${fmtEur(n.costo_mensile)}/mese</span></div><div class="cost-row"><span>Costo annuo</span><span class="cost-val red">${fmtEur((n.costo_mensile||0)*12)}/anno</span></div><div class="cost-row"><span>Inizio</span><span class="cost-val">${fmt(n.inizio)}</span></div><div class="cost-row"><span>Scadenza</span><span class="cost-val">${fmt(n.scadenza)}</span></div>${n.note?`<div class="cost-row"><span>Note</span><span class="cost-val" style="font-size:11px">${n.note}</span></div>`:''}</div>`).join('')}`;}
+function openAddNoleggio(){editNolId=null;document.getElementById('modal-nol-title').textContent='Nuovo noleggio';['n-desc','n-fornitore','n-inizio','n-scadenza','n-note'].forEach(id=>document.getElementById(id).value='');document.getElementById('n-costo').value='';document.getElementById('modal-noleggio').classList.add('open');}
+function editNoleggio(nid){editNolId=nid;const n=noleggi.find(x=>x.nid===nid);if(!n)return;document.getElementById('modal-nol-title').textContent='Modifica noleggio';document.getElementById('n-desc').value=n.descrizione;document.getElementById('n-fornitore').value=n.fornitore;document.getElementById('n-costo').value=n.costo_mensile;document.getElementById('n-inizio').value=n.inizio||'';document.getElementById('n-scadenza').value=n.scadenza||'';document.getElementById('n-note').value=n.note||'';document.getElementById('modal-noleggio').classList.add('open');}
+async function saveNoleggio(){const item={nid:editNolId||uid(),descrizione:document.getElementById('n-desc').value,fornitore:document.getElementById('n-fornitore').value,costo_mensile:parseFloat(document.getElementById('n-costo').value)||0,inizio:document.getElementById('n-inizio').value||null,scadenza:document.getElementById('n-scadenza').value||null,note:document.getElementById('n-note').value};const {error}=editNolId?await sb.from('noleggi').update(item).eq('nid',editNolId):await sb.from('noleggi').insert(item);if(error)alert('Errore: '+error.message);else{closeModal('modal-noleggio');await loadAll();}}
 
-function renderCosti(){const totRip=riparazioni.reduce((s,r)=>s+(parseFloat(r.costo)||0),0),totNolMensile=noleggi.reduce((s,n)=>s+(parseFloat(n.costoMensile)||0),0);const byCat={};riparazioni.forEach(r=>{const a=articoli.find(x=>x.id===r.artId);if(!a)return;if(!byCat[a.cat])byCat[a.cat]={n:0,costo:0};byCat[a.cat].n++;byCat[a.cat].costo+=(parseFloat(r.costo)||0);});const byArt={};riparazioni.forEach(r=>{if(!byArt[r.artId])byArt[r.artId]=0;byArt[r.artId]+=(parseFloat(r.costo)||0);});const top5=Object.entries(byArt).sort((a,b)=>b[1]-a[1]).slice(0,5);document.getElementById('costi-content').innerHTML=`<div class="stats-grid"><div class="stat-card"><div class="stat-val red">${fmtEur(totRip)}</div><div class="stat-lbl">Totale speso riparazioni</div></div><div class="stat-card"><div class="stat-val blue">${fmtEur(totNolMensile)}/mese</div><div class="stat-lbl">Noleggio mensile</div></div><div class="stat-card"><div class="stat-val red">${fmtEur(totNolMensile*12)}/anno</div><div class="stat-lbl">Noleggio annuo</div></div><div class="stat-card"><div class="stat-val amber">${riparazioni.length}</div><div class="stat-lbl">Riparazioni registrate</div></div></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:4px"><div class="cost-box"><div class="cost-box-title">Costi per categoria</div>${Object.entries(byCat).length===0?'<div class="empty">Nessun costo inserito</div>':Object.entries(byCat).sort((a,b)=>b[1].costo-a[1].costo).map(([cat,v])=>`<div class="cost-row"><span>${cat} <span style="color:#4b5563;font-size:10px">(${v.n})</span></span><span class="cost-val">${fmtEur(v.costo)}</span></div>`).join('')+`<div class="cost-row"><span><strong>TOTALE</strong></span><span class="cost-val red">${fmtEur(totRip)}</span></div>`}</div><div class="cost-box"><div class="cost-box-title">Top articoli per costo</div>${top5.length===0?'<div class="empty">Nessun costo inserito</div>':top5.map(([artId,costo])=>{const a=articoli.find(x=>x.id===artId)||{};return`<div class="cost-row"><span><span class="code">${artId}</span> ${a.marca||''} ${a.modello||''}</span><span class="cost-val">${fmtEur(costo)}</span></div>`;}).join('')}</div></div><div class="cost-box" style="margin-top:16px"><div class="cost-box-title">Contratti noleggio</div>${noleggi.map(n=>`<div class="cost-row"><span><strong>${n.desc}</strong> — ${n.fornitore||'N/D'}</span><span><span class="cost-val blue">${fmtEur(n.costoMensile)}/mese</span> &nbsp;|&nbsp; <span class="cost-val red">${fmtEur((parseFloat(n.costoMensile)||0)*12)}/anno</span></span></div>`).join('')}<div class="cost-row"><span><strong>TOTALE</strong></span><span><span class="cost-val blue">${fmtEur(totNolMensile)}/mese</span> &nbsp;|&nbsp; <span class="cost-val red">${fmtEur(totNolMensile*12)}/anno</span></span></div></div>`;}
+// ── COSTI ─────────────────────────────────────────────────────────────────
+function renderCosti(){const totRip=riparazioni.reduce((s,r)=>s+(parseFloat(r.costo)||0),0),totNol=noleggi.reduce((s,n)=>s+(parseFloat(n.costo_mensile)||0),0);const byCat={};riparazioni.forEach(r=>{const a=articoli.find(x=>x.id===r.art_id);if(!a)return;if(!byCat[a.cat])byCat[a.cat]={n:0,costo:0};byCat[a.cat].n++;byCat[a.cat].costo+=(parseFloat(r.costo)||0);});const byArt={};riparazioni.forEach(r=>{if(!byArt[r.art_id])byArt[r.art_id]=0;byArt[r.art_id]+=(parseFloat(r.costo)||0);});const top5=Object.entries(byArt).sort((a,b)=>b[1]-a[1]).slice(0,5);document.getElementById('costi-content').innerHTML=`<div class="stats-grid"><div class="stat-card"><div class="stat-val red">${fmtEur(totRip)}</div><div class="stat-lbl">Totale riparazioni</div></div><div class="stat-card"><div class="stat-val blue">${fmtEur(totNol)}/mese</div><div class="stat-lbl">Noleggio mensile</div></div><div class="stat-card"><div class="stat-val red">${fmtEur(totNol*12)}/anno</div><div class="stat-lbl">Noleggio annuo</div></div><div class="stat-card"><div class="stat-val amber">${riparazioni.length}</div><div class="stat-lbl">Riparazioni registrate</div></div></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:4px"><div class="cost-box"><div class="cost-box-title">Costi per categoria</div>${Object.entries(byCat).length===0?'<div class="empty">Nessun costo inserito</div>':Object.entries(byCat).sort((a,b)=>b[1].costo-a[1].costo).map(([cat,v])=>`<div class="cost-row"><span>${cat} <span style="color:#4b5563;font-size:10px">(${v.n})</span></span><span class="cost-val">${fmtEur(v.costo)}</span></div>`).join('')+`<div class="cost-row"><span><strong>TOTALE</strong></span><span class="cost-val red">${fmtEur(totRip)}</span></div>`}</div><div class="cost-box"><div class="cost-box-title">Top articoli per costo</div>${top5.length===0?'<div class="empty">Nessun costo inserito</div>':top5.map(([artId,costo])=>{const a=articoli.find(x=>x.id===artId)||{};return`<div class="cost-row"><span><span class="code">${artId}</span> ${a.marca||''} ${a.modello||''}</span><span class="cost-val">${fmtEur(costo)}</span></div>`;}).join('')}</div></div><div class="cost-box" style="margin-top:16px"><div class="cost-box-title">Contratti noleggio</div>${noleggi.map(n=>`<div class="cost-row"><span><strong>${n.descrizione}</strong> — ${n.fornitore||'N/D'}</span><span><span class="cost-val blue">${fmtEur(n.costo_mensile)}/mese</span> | <span class="cost-val red">${fmtEur((n.costo_mensile||0)*12)}/anno</span></span></div>`).join('')}<div class="cost-row"><span><strong>TOTALE</strong></span><span><span class="cost-val blue">${fmtEur(totNol)}/mese</span> | <span class="cost-val red">${fmtEur(totNol*12)}/anno</span></span></div></div>`;}
 
-function exportCSV(){const h=['Codice','Categoria','Marca','Modello','Posizione','Stato','Proprietà','N.Riparazioni','Costo.Tot.Riparazioni','Gestito.Da','Note'];const rows=articoli.map(a=>{const rips=getRipByArt(a.id),costo=getCostoTotRip(a.id);return[a.id,a.cat,a.marca,a.modello,a.pos,a.stato,a.prop,rips.length,costo>0?costo.toFixed(2):'',a.gestito,a.note].map(v=>`"${String(v||'').replace(/"/g,'""')}"`).join(',');});const csv=[h.join(','),...rows].join('\n');const el=document.createElement('a');el.href='data:text/csv;charset=utf-8,\uFEFF'+encodeURIComponent(csv);el.download='Prohibido_Inventario_'+new Date().toISOString().slice(0,10)+'.csv';el.click();}
+// ── EXPORT ────────────────────────────────────────────────────────────────
+function exportCSV(){const h=['Codice','Categoria','Marca','Modello','Posizione','Stato','Proprietà','N.Riparazioni','Costo.Totale','Gestito.Da','Note'];const rows=articoli.map(a=>{const rips=getRipByArt(a.id),costo=getCostoTot(a.id);return[a.id,a.cat,a.marca,a.modello,a.pos,a.stato,a.prop,rips.length,costo>0?costo.toFixed(2):'',a.gestito,a.note].map(v=>`"${String(v||'').replace(/"/g,'""')}"`).join(',');});const csv=[h.join(','),...rows].join('\n');const el=document.createElement('a');el.href='data:text/csv;charset=utf-8,\uFEFF'+encodeURIComponent(csv);el.download='Prohibido_'+new Date().toISOString().slice(0,10)+'.csv';el.click();}
 
 document.querySelectorAll('.modal-bg').forEach(m=>m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('open');}));
-load();
-renderDashboard();
-populateInvCats();
+
+// Auto-refresh ogni 30 secondi
+setInterval(()=>{loadAll();},30000);
+loadAll();
 </script>
 </body>
 </html>
